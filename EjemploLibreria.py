@@ -2,6 +2,8 @@ import psutil  # Librería para obtener información del sistema (CPU, RAM, Disc
 import time
 import statistics
 import math
+import matplotlib.pyplot as plt
+import numpy as np
 
 def get_correlation(x, y):
     """
@@ -46,7 +48,7 @@ def collect_advanced_data(samples=30, interval=0.2):
         'disk_io': []        # Lista para actividad de disco (delta en KB)
     }
     
-    # 🔹 Obtiene el número de núcleos lógicos del procesador
+    # Obtiene el número de núcleos lógicos del procesador
     # cpu_count() devuelve la cantidad de cores disponibles
     num_cores = psutil.cpu_count()
     
@@ -54,19 +56,19 @@ def collect_advanced_data(samples=30, interval=0.2):
     for _ in range(num_cores):
         data['cpu_cores'].append([])
 
-    # 🔹 Obtiene estadísticas acumuladas de disco desde que inició el sistema
+    # Obtiene estadísticas acumuladas de disco desde que inició el sistema
     # disk_io_counters() devuelve lectura y escritura totales (en bytes)
     last_disk = psutil.disk_io_counters()
     
     for _ in range(samples):
         
-        # 1️⃣ CPU Overall
+        # CPU Overall
         # cpu_percent(interval=interval)
         # - Espera el tiempo indicado (interval)
         # - Calcula el porcentaje promedio de uso en ese periodo
         data['cpu_overall'].append(psutil.cpu_percent(interval=interval))
         
-        # 2️⃣ CPU Per Core
+        # CPU Per Core
         # percpu=True hace que devuelva una lista con el uso de cada núcleo
         cores_usage = psutil.cpu_percent(percpu=True)
         
@@ -74,12 +76,12 @@ def collect_advanced_data(samples=30, interval=0.2):
         for i, val in enumerate(cores_usage):
             data['cpu_cores'][i].append(val)
             
-        # 3️⃣ RAM usage
+        # RAM usage
         # virtual_memory() devuelve información completa de memoria
         # .percent devuelve el porcentaje de RAM utilizada
         data['ram_percent'].append(psutil.virtual_memory().percent)
         
-        # 4️⃣ Disk IO (Delta)
+        # Disk IO (Delta)
         # Obtiene nuevamente los contadores acumulativos del disco
         current_disk = psutil.disk_io_counters()
         
@@ -105,7 +107,7 @@ def show_advanced_stats(data):
     print("   MONITOR DE SISTEMA AVANZADO - ANÁLISIS ESTADÍSTICO")
     print("="*60)
 
-    # 1️⃣ CPU Overall Analysis
+    # CPU Overall Analysis
     cpu = data['cpu_overall']
     print(f"\n[CPU TOTAL] (n={len(cpu)})")
     
@@ -119,7 +121,7 @@ def show_advanced_stats(data):
     # Desviación estándar (variabilidad)
     print(f"  Desviación Estándar: {statistics.stdev(cpu):.4f}")
 
-    # 2️⃣ Per-Core Analysis (balanceo de carga)
+    # Per-Core Analysis (balanceo de carga)
     print("\n[ANÁLISIS DE CARGA POR NÚCLEO]")
     
     # Calcula la media de uso para cada núcleo
@@ -134,7 +136,7 @@ def show_advanced_stats(data):
     # Diferencia entre núcleo más y menos usado
     print(f"  Rango Inter-núcleos (Variable de balanceo): {max_core - min_core:.2f}%")
 
-    # 3️⃣ Correlation CPU vs RAM
+    # Correlation CPU vs RAM
     ram = data['ram_percent']
     
     # Se calcula correlación usando función personalizada
@@ -153,7 +155,7 @@ def show_advanced_stats(data):
     
     print(f"  Interpretación: Correlación {type_corr}")
 
-    # 4️⃣ DISK IO Analysis
+    # DISK IO Analysis
     disk = data['disk_io']
     print(f"\n[ACTIVIDAD DE DISCO (KB/intervalo)]")
     
@@ -178,6 +180,65 @@ def show_advanced_stats(data):
         
         print(f"{low:3}-{high:3}% | {'#' * count} ({count})")
 
+def plot_system_metrics(data):
+    """
+    Genera un dashboard gráfico con las métricas recolectadas.
+    """
+    print("\nGenerando salida gráfica...")
+    
+    # Configuración de estilo premium
+    plt.style.use('seaborn-v0_8-darkgrid')
+    fig, axs = plt.subplots(2, 2, figsize=(14, 10))
+    fig.suptitle('Métricas de Rendimiento del Sistema', fontsize=20, fontweight='bold', color='#2c3e50')
+    
+    # Colores elegantes
+    colors = ['#3498db', '#e74c3c', '#2ecc71', '#f1c40f']
+
+    # 1. Series Temporales: CPU Overall vs RAM
+    ax1 = axs[0, 0]
+    samples = range(len(data['cpu_overall']))
+    ax1.plot(samples, data['cpu_overall'], label='CPU Total (%)', color=colors[0], linewidth=2, marker='o', markersize=4)
+    ax1.plot(samples, data['ram_percent'], label='RAM (%)', color=colors[1], linewidth=2, linestyle='--')
+    ax1.set_title('Uso de CPU vs RAM en el Tiempo', fontsize=14, fontweight='semibold')
+    ax1.set_xlabel('Muestra')
+    ax1.set_ylabel('Porcentaje (%)')
+    ax1.legend()
+    ax1.set_ylim(0, 105)
+
+    # 2. Análisis por Núcleo (Barras)
+    ax2 = axs[0, 1]
+    core_means = [statistics.mean(core) for core in data['cpu_cores']]
+    core_labels = [f'Core {i}' for i in range(len(core_means))]
+    bars = ax2.bar(core_labels, core_means, color=colors[2], alpha=0.8)
+    ax2.set_title('Uso Promedio por Núcleo de CPU', fontsize=14, fontweight='semibold')
+    ax2.set_ylabel('Uso Promedio (%)')
+    ax2.set_ylim(0, 105)
+    
+    # Añadir etiquetas sobre las barras
+    for bar in bars:
+        height = bar.get_height()
+        ax2.text(bar.get_x() + bar.get_width()/2., height + 1, f'{height:.1f}%', ha='center', va='bottom', fontsize=10)
+
+    # 3. Distribución de CPU (Histograma)
+    ax3 = axs[1, 0]
+    ax3.hist(data['cpu_overall'], bins=10, range=(0, 100), color=colors[3], edgecolor='white', alpha=0.7)
+    ax3.set_title('Distribución de Frecuencia (CPU Total)', fontsize=14, fontweight='semibold')
+    ax3.set_xlabel('Rango de Uso (%)')
+    ax3.set_ylabel('Frecuencia')
+
+    # 4. Actividad de Disco (Línea de área)
+    ax4 = axs[1, 1]
+    ax4.fill_between(samples, data['disk_io'], color=colors[0], alpha=0.3)
+    ax4.plot(samples, data['disk_io'], color=colors[0], linewidth=1.5)
+    ax4.set_title('Actividad de Disco (E/S)', fontsize=14, fontweight='semibold')
+    ax4.set_xlabel('Muestra')
+    ax4.set_ylabel('KB Transferidos')
+
+    # Ajuste final
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    print("Dashboard listo. Se abrirá una ventana con los gráficos.")
+    plt.show()
+
 if __name__ == "__main__":
     try:
         # Recolección de datos del sistema
@@ -185,6 +246,9 @@ if __name__ == "__main__":
         
         # Análisis estadístico de los datos
         show_advanced_stats(system_data)
+        
+        # Generación de gráficos
+        plot_system_metrics(system_data)
         
     except KeyboardInterrupt:
         print("\nPrueba detenida.")
